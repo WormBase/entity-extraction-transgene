@@ -32,7 +32,7 @@ def main():
     cm = CorpusManager()
     db_manager = WBDBManager(dbname=args.db_name, user=args.db_user, password=args.db_password, host=args.db_host)
     with db_manager.generic.get_cursor() as curs:
-        curs.execute("SELECT trp_paper FROM trp_peper")
+        curs.execute("SELECT trp_paper FROM trp_paper")
         already_processed = {papid.replace("\"", "") for row in curs.fetchall() for papid in row[0].split(",")}
     cm.load_from_wb_database(
         db_name=args.db_name, db_user=args.db_user, db_password=args.db_password, db_host=args.db_host,
@@ -56,10 +56,10 @@ def main():
                 start_match = re.match(r'^{}[\s:,;.]'.format(escaped_transgene), sentence)
 
                 # Match transgene in the middle of the sentence
-                middle_match = re.search(r'(?<=\s|^){}(?=[\s:,;.]|$)'.format(escaped_transgene), sentence)
+                middle_match = re.search(r'(^|\s){}(?=[\s:,;.]|$)'.format(escaped_transgene), sentence)
 
                 # Match transgene at the end of the sentence
-                end_match = re.search(r'(?<=\s){}\.$'.format(escaped_transgene), sentence)
+                end_match = re.search(r'{}[\s:,;.!?]?(\s|$)'.format(escaped_transgene), sentence)
 
                 # Match transgene with optional parentheses
                 paren_match = re.search(r'\(?{}(?:[),]|\)?)'.format(escaped_transgene), sentence)
@@ -67,7 +67,7 @@ def main():
                 if start_match or middle_match or end_match or paren_match:
                     transgene_papers[transgene].add(paper.paper_id)
 
-            unknown_matches = re.findall(r'\b([a-z]{1,3}(Is|In|Si|Ex)[0-9]+([a-z]{1}?))\b', sentence, re.IGNORECASE)
+            unknown_matches = re.findall(r'\b([a-z]{1,3}(Is|In|Si|Ex)[0-9]+[a-z]?)\b', sentence, re.IGNORECASE)
             for match in unknown_matches:
                 if match[0].lower() not in known_transgenes:
                     unknown_transgene_papers[match[0]].add(paper.paper_id)
