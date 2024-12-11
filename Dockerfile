@@ -14,6 +14,7 @@ ENV DB_USER=""
 ENV DB_PASSWD=""
 ENV MAX_NUM_PAPERS=50
 ENV FROM_DATE="1970-01-01"
+ENV PROCESSED_FILES_PATH="/usr/src/app/results"
 
 ADD crontab /etc/cron.d/transgene-ext-cron
 

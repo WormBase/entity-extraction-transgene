@@ -35,9 +35,10 @@ def main():
 
     from_date = args.from_date
     if args.processed_files_path is not None:
-        os.makedirs(args.working_dir, exist_ok=True)
+        os.makedirs(args.processed_files_path, exist_ok=True)
         all_files = sorted(
-            [f for f in os.listdir(args.working_dir) if os.path.isfile(os.path.join(args.working_dir, f))])
+            [f for f in os.listdir(args.processed_files_path) if
+             os.path.isfile(os.path.join(args.processed_files_path, f))])
         if all_files:
             from_date = all_files[-1].split("_")[0]
 
@@ -94,7 +95,7 @@ def main():
     # Process known transgenes
     for transgene_name, paper_ids in transgene_papers.items():
         with db_manager.generic.get_cursor() as curs:
-            res = curs.execute("SELECT id FROM trp_transgene WHERE trp_transgene = %s", (transgene_name,))
+            res = curs.execute("SELECT joinkey FROM trp_publicname WHERE trp_publicname = %s", (transgene_name,))
             transgene_id = res.fetchone()
             curs.execute("DELETE FROM trp_paper WHERE joinkey = %s", (transgene_id,))
             curs.execute("INSERT INTO trp_paper (joinkey, trp_paper) VALUES (%s, %s)",
