@@ -1,5 +1,7 @@
 import argparse
+import datetime
 import logging
+import os
 import re
 from collections import defaultdict
 
@@ -23,22 +25,21 @@ def main():
     parser.add_argument("-d", "--from-date", metavar="from_date", dest="from_date", type=str,
                         help="use only articles included in WB at or after the specified date")
     parser.add_argument("-m", "--max-num-papers", metavar="max_num_papers", dest="max_num_papers", type=int)
-    parser.add_argument("-f", "--processed-file", metavar="processed_file", dest="processed_file", type=str,
-                        default=None, help="path to file with processed WBPaper IDs")
+    parser.add_argument("-f", "--processed-files-path", metavar="processed_files_path",
+                        dest="processed_files_path", type=str,
+                        default=None, help="path to files with processed WBPaper IDs")
 
     args = parser.parse_args()
     logging.basicConfig(filename=args.log_file, level=args.log_level,
                         format='%(asctime)s - %(name)s - %(levelname)s:%(message)s')
 
-    # Read processed WBPaper IDs from file
-    if args.processed_file is not None:
-        try:
-            with open(args.processed_file, 'r') as f:
-                processed_ids = {line.strip() for line in f}
-        except FileNotFoundError:
-            processed_ids = set()
-    else:
-        processed_ids = set()
+    from_date = args.from_date
+    if args.processed_files_path is not None:
+        os.makedirs(args.working_dir, exist_ok=True)
+        all_files = sorted(
+            [f for f in os.listdir(args.working_dir) if os.path.isfile(os.path.join(args.working_dir, f))])
+        if all_files:
+            from_date = all_files[-1].split("_")[0]
 
     cm = CorpusManager()
     db_manager = WBDBManager(dbname=args.db_name, user=args.db_user, password=args.db_password, host=args.db_host)
@@ -47,12 +48,16 @@ def main():
         curs.execute("SELECT trp_paper FROM trp_paper")
         already_processed = {papid.replace("\"", "") for row in curs.fetchall() for papid in row[0].split(",")}
 
-    all_processed_ids = already_processed | processed_ids
     cm.load_from_wb_database(
-        db_name=args.db_name, db_user=args.db_user, db_password=args.db_password, db_host=args.db_host,
-        from_date=args.from_date, max_num_papers=args.max_num_papers,
-        exclude_ids=list(all_processed_ids),
-        pap_types=["Journal_article"], exclude_temp_pdf=True)
+        db_name=args.db_name,
+        db_user=args.db_user,
+        db_password=args.db_password,
+        db_host=args.db_host,
+        from_date=from_date,
+        max_num_papers=args.max_num_papers,
+        exclude_ids=list(already_processed),
+        pap_types=["Journal_article"],
+        exclude_temp_pdf=True)
 
     logger.info("Finished loading papers from DB")
     known_transgenes = db_manager.generic.get_curated_transgenes(exclude_id_used_as_name=True, exclude_invalid=True)
@@ -64,6 +69,7 @@ def main():
 
     transgene_papers = defaultdict(set)
     unknown_transgene_papers = defaultdict(set)
+    processed_ids = []
 
     for paper in cm.get_all_papers():
         logger.info("Extracting transgene info from paper " + paper.paper_id)
@@ -83,8 +89,7 @@ def main():
             if transgene.lower() not in known_transgenes:
                 unknown_transgene_papers[transgene].add(paper.paper_id)
 
-        # Add processed paper ID to the set
-        processed_ids.add(paper.paper_id)
+        processed_ids.append(paper.paper_id)
 
     # Process known transgenes
     for transgene_name, paper_ids in transgene_papers.items():
@@ -128,8 +133,9 @@ def main():
             curs.execute("INSERT INTO trp_curator_hst (joinkey, trp_curator) VALUES (%s, 'WBPerson4793')", (new_id,))
 
     # Write processed paper IDs back to file
-    if args.processed_file is not None:
-        with open(args.processed_file, 'w') as f:
+    if args.processed_files_path is not None:
+        file_name = datetime.datetime.now().strftime("%Y%m%d") + "_" + from_date + "_results.csv"
+        with open(file_name, 'w') as f:
             for paper_id in processed_ids:
                 f.write(f"{paper_id}\n")
 
