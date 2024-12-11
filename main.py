@@ -6,7 +6,6 @@ from collections import defaultdict
 from wbtools.db.dbmanager import WBDBManager
 from wbtools.literature.corpus import CorpusManager
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -24,63 +23,79 @@ def main():
     parser.add_argument("-d", "--from-date", metavar="from_date", dest="from_date", type=str,
                         help="use only articles included in WB at or after the specified date")
     parser.add_argument("-m", "--max-num-papers", metavar="max_num_papers", dest="max_num_papers", type=int)
+    parser.add_argument("-f", "--processed-file", metavar="processed_file", dest="processed_file", type=str,
+                        default=None, help="path to file with processed WBPaper IDs")
 
     args = parser.parse_args()
     logging.basicConfig(filename=args.log_file, level=args.log_level,
                         format='%(asctime)s - %(name)s - %(levelname)s:%(message)s')
 
+    # Read processed WBPaper IDs from file
+    if args.processed_file is not None:
+        try:
+            with open(args.processed_file, 'r') as f:
+                processed_ids = {line.strip() for line in f}
+        except FileNotFoundError:
+            processed_ids = set()
+    else:
+        processed_ids = set()
+
     cm = CorpusManager()
     db_manager = WBDBManager(dbname=args.db_name, user=args.db_user, password=args.db_password, host=args.db_host)
+
     with db_manager.generic.get_cursor() as curs:
         curs.execute("SELECT trp_paper FROM trp_paper")
         already_processed = {papid.replace("\"", "") for row in curs.fetchall() for papid in row[0].split(",")}
+
+    all_processed_ids = already_processed | processed_ids
     cm.load_from_wb_database(
         db_name=args.db_name, db_user=args.db_user, db_password=args.db_password, db_host=args.db_host,
         from_date=args.from_date, max_num_papers=args.max_num_papers,
-        exclude_ids=list(already_processed),
+        exclude_ids=list(all_processed_ids),
         pap_types=["Journal_article"], exclude_temp_pdf=True)
+
     logger.info("Finished loading papers from DB")
     known_transgenes = db_manager.generic.get_curated_transgenes(exclude_id_used_as_name=True, exclude_invalid=True)
     known_transgenes = set(known_transgenes)
-    unknown_transgene_papers = defaultdict(set)
+
+    transgene_pattern = re.compile(r'\b([a-z]{1,3}(Is|In|Si|Ex)[0-9]+[a-z]?)\b', re.IGNORECASE)
+    known_transgenes_pattern = {re.compile(r'(^|\s){}(?=[\s:,;.]|$)'.format(re.escape(transgene))) for transgene in
+                                known_transgenes}
+
     transgene_papers = defaultdict(set)
+    unknown_transgene_papers = defaultdict(set)
+
     for paper in cm.get_all_papers():
         logger.info("Extracting transgene info from paper " + paper.paper_id)
+        # Concatenate all sentences with double spaces
         sentences = paper.get_text_docs(include_supplemental=True, split_sentences=True, lowercase=False)
-        for sentence in sentences:
-            sentence = sentence.replace('–', '-')
-            sentence = sentence.replace('‐', '-')
+        concatenated_text = '  '.join(sentence.replace('–', '-').replace('‐', '-') for sentence in sentences)
 
-            for transgene in known_transgenes:
-                escaped_transgene = re.escape(transgene)
-                start_match = re.match(r'^{}[\s:,;.]'.format(escaped_transgene), sentence)
+        # Extract known transgenes
+        for pattern in known_transgenes_pattern:
+            for match in pattern.finditer(concatenated_text):
+                transgene_name = match.group(0).strip()
+                transgene_papers[transgene_name].add(paper.paper_id)
 
-                # Match transgene in the middle of the sentence
-                middle_match = re.search(r'(^|\s){}(?=[\s:,;.]|$)'.format(escaped_transgene), sentence)
+        # Extract unknown transgenes
+        for match in transgene_pattern.finditer(concatenated_text):
+            transgene = match.group(0)
+            if transgene.lower() not in known_transgenes:
+                unknown_transgene_papers[transgene].add(paper.paper_id)
 
-                # Match transgene at the end of the sentence
-                end_match = re.search(r'{}[\s:,;.!?]?(\s|$)'.format(escaped_transgene), sentence)
+        # Add processed paper ID to the set
+        processed_ids.add(paper.paper_id)
 
-                # Match transgene with optional parentheses
-                paren_match = re.search(r'\(?{}(?:[),]|\)?)'.format(escaped_transgene), sentence)
-
-                if start_match or middle_match or end_match or paren_match:
-                    transgene_papers[transgene].add(paper.paper_id)
-
-            unknown_matches = re.findall(r'\b([a-z]{1,3}(Is|In|Si|Ex)[0-9]+[a-z]?)\b', sentence, re.IGNORECASE)
-            for match in unknown_matches:
-                if match[0].lower() not in known_transgenes:
-                    unknown_transgene_papers[match[0]].add(paper.paper_id)
-
+    # Process known transgenes
     for transgene_name, paper_ids in transgene_papers.items():
         with db_manager.generic.get_cursor() as curs:
             res = curs.execute("SELECT id FROM trp_transgene WHERE trp_transgene = %s", (transgene_name,))
             transgene_id = res.fetchone()
             curs.execute("DELETE FROM trp_paper WHERE joinkey = %s", (transgene_id,))
             curs.execute("INSERT INTO trp_paper (joinkey, trp_paper) VALUES (%s, %s)",
-                         (transgene_id, ",".join(["\"" + pap_id + "\"" for pap_id in paper_ids])))
+                         (transgene_id, ",".join([f"\"{pap_id}\"" for pap_id in paper_ids])))
             curs.execute("INSERT INTO trp_paper_hst (joinkey, trp_paper) VALUES (%s, %s)",
-                         (transgene_id, ",".join(["\"" + pap_id + "\"" for pap_id in paper_ids])))
+                         (transgene_id, ",".join([f"\"{pap_id}\"" for pap_id in paper_ids])))
 
     # Process unknown transgenes
     for transgene_name, paper_ids in unknown_transgene_papers.items():
@@ -110,10 +125,13 @@ def main():
             curs.execute("INSERT INTO trp_publicname_hst (joinkey, trp_publicname) VALUES (%s, %s)",
                          (new_id, transgene_name))
             curs.execute("INSERT INTO trp_paper_hst (joinkey, trp_paper) VALUES (%s, %s)", (new_id, paper_ids_str))
-            curs.execute("INSERT INTO trp_curator_hst (joinkey, trp_curator) VALUES (%s, 'WBPerson4793')",
-                         (new_id,))
+            curs.execute("INSERT INTO trp_curator_hst (joinkey, trp_curator) VALUES (%s, 'WBPerson4793')", (new_id,))
 
-        logger.info("Finished processing all transgenes")
+    # Write processed paper IDs back to file
+    if args.processed_file is not None:
+        with open(args.processed_file, 'w') as f:
+            for paper_id in processed_ids:
+                f.write(f"{paper_id}\n")
 
     logger.info("Finished")
 
