@@ -49,6 +49,7 @@ def main():
         curs.execute("SELECT trp_paper FROM trp_paper")
         already_processed = {papid.replace("\"", "") for row in curs.fetchall() for papid in row[0].split(",")}
 
+    logger.debug(f"Number of already processed papers: {str(len(already_processed))}")
     cm.load_from_wb_database(
         db_name=args.db_name,
         db_user=args.db_user,
@@ -61,8 +62,11 @@ def main():
         exclude_temp_pdf=True)
 
     logger.info("Finished loading papers from DB")
+    logger.debug(f"Number of papers in the selected corpus: {str(cm.size())}")
     known_transgenes = db_manager.generic.get_curated_transgenes(exclude_id_used_as_name=True, exclude_invalid=True)
     known_transgenes = set(known_transgenes)
+
+    logger.debug(f"Number of known transgenes: {str(len(known_transgenes))}")
 
     transgene_pattern = re.compile(r'\b([a-z]{1,3}(Is|In|Si|Ex)[0-9]+[a-z]?)\b', re.IGNORECASE)
     known_transgenes_pattern = {re.compile(r'(^|\s){}(?=[\s:,;.]|$)'.format(re.escape(transgene))) for transgene in
