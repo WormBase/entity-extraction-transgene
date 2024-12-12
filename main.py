@@ -56,7 +56,7 @@ def main():
         db_host=args.db_host,
         from_date=args.from_date,
         max_num_papers=args.max_num_papers,
-        exclude_ids=list(already_processed),
+        exclude_ids=list(all_proceesed),
         pap_types=["Journal_article"],
         exclude_temp_pdf=True)
 
