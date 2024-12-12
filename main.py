@@ -104,7 +104,7 @@ def main():
             curs.execute("DELETE FROM trp_paper WHERE joinkey = %s", (transgene_id,))
             curs.execute("INSERT INTO trp_paper (joinkey, trp_paper) VALUES (%s, %s)",
                          (transgene_id, ",".join([f"\"{pap_id}\"" for pap_id in paper_ids])))
-            curs.execute("INSERT INTO trp_paper_hst (joinkey, trp_paper) VALUES (%s, %s)",
+            curs.execute("INSERT INTO trp_paper_hst (joinkey, trp_paper_hst) VALUES (%s, %s)",
                          (transgene_id, ",".join([f"\"{pap_id}\"" for pap_id in paper_ids])))
 
     # Process unknown transgenes
@@ -117,7 +117,7 @@ def main():
             new_wbtransgene_id = f"WBTransgene{new_id:08d}"
 
             # Insert into trp_name
-            curs.execute("INSERT INTO trp_name (id, object) VALUES (%s, %s)", (new_id, new_wbtransgene_id))
+            curs.execute("INSERT INTO trp_name (joinkey, trp_name) VALUES (%s, %s)", (new_id, new_wbtransgene_id))
 
             # Insert into trp_publicname
             curs.execute("INSERT INTO trp_publicname (joinkey, trp_publicname) VALUES (%s, %s)",
@@ -131,11 +131,11 @@ def main():
             curs.execute("INSERT INTO trp_curator (joinkey, trp_curator) VALUES (%s, 'WBPerson4793')", (new_id,))
 
             # Update history tables
-            curs.execute("INSERT INTO trp_name_hst (id, object) VALUES (%s, %s)", (new_id, new_wbtransgene_id))
-            curs.execute("INSERT INTO trp_publicname_hst (joinkey, trp_publicname) VALUES (%s, %s)",
+            curs.execute("INSERT INTO trp_name_hst (joinkey, trp_name_hst) VALUES (%s, %s)", (new_id, new_wbtransgene_id))
+            curs.execute("INSERT INTO trp_publicname_hst (joinkey, trp_publicname_hst) VALUES (%s, %s)",
                          (new_id, transgene_name))
-            curs.execute("INSERT INTO trp_paper_hst (joinkey, trp_paper) VALUES (%s, %s)", (new_id, paper_ids_str))
-            curs.execute("INSERT INTO trp_curator_hst (joinkey, trp_curator) VALUES (%s, 'WBPerson4793')", (new_id,))
+            curs.execute("INSERT INTO trp_paper_hst (joinkey, trp_paper_hst) VALUES (%s, %s)", (new_id, paper_ids_str))
+            curs.execute("INSERT INTO trp_curator_hst (joinkey, trp_curator_hst) VALUES (%s, 'WBPerson4793')", (new_id,))
 
     # Write processed paper IDs back to file
     if args.processed_files_path is not None:
