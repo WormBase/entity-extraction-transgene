@@ -1,4 +1,4 @@
 SHELL=/bin/bash
 BASH_ENV=/container.env
 
-00 30 * * * /usr/local/bin/python3 /usr/src/app/main.py -L INFO -N $DB_NAME -U $DB_USER -P $DB_PASSWD -H $DB_HOST -d $FROM_DATE -m $MAX_NUM_PAPERS -f $PROCESSED_FILES_PATH >> /var/log/transgene_ext_pipeline.log 2>&1
+30 0 * * * /usr/local/bin/python3 /usr/src/app/main.py -L INFO -N $DB_NAME -U $DB_USER -P $DB_PASSWD -H $DB_HOST -d $FROM_DATE -m $MAX_NUM_PAPERS -f $PROCESSED_FILES_PATH >> /var/log/transgene_ext_pipeline.log 2>&1
