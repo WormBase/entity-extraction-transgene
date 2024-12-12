@@ -98,11 +98,12 @@ def main():
 
     # add unknown transgenes to db
     with db_manager.generic.get_cursor() as curs:
+        curs.execute("SELECT MAX(joinkey::int) FROM trp_name")
+        max_id = int(curs.fetchone()[0])
+        new_id = max_id if max_id else 0
         for transgene_name in unknown_transgenes_to_add:
             # Generate new WBTransgene ID
-            curs.execute("SELECT MAX(joinkey) FROM trp_name")
-            max_id = int(curs.fetchone()[0])
-            new_id = max_id + 1 if max_id else 1
+            new_id = new_id + 1
             new_wbtransgene_id = f"WBTransgene{new_id:08d}"
 
             # Insert into trp_name
