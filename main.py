@@ -33,14 +33,12 @@ def main():
     logging.basicConfig(filename=args.log_file, level=args.log_level,
                         format='%(asctime)s - %(name)s - %(levelname)s:%(message)s')
 
-    from_date = args.from_date
+    script_processed = set()
     if args.processed_files_path is not None:
         os.makedirs(args.processed_files_path, exist_ok=True)
-        all_files = sorted(
-            [f for f in os.listdir(args.processed_files_path) if
-             os.path.isfile(os.path.join(args.processed_files_path, f))])
-        if all_files:
-            from_date = all_files[-1].split("_")[0]
+        for f in os.listdir(args.processed_files_path):
+            if os.path.isfile(os.path.join(args.processed_files_path, f)):
+                script_processed.update({line.strip() for line in open(os.path.join(args.processed_files_path, f))})
 
     cm = CorpusManager()
     db_manager = WBDBManager(dbname=args.db_name, user=args.db_user, password=args.db_password, host=args.db_host)
@@ -49,13 +47,14 @@ def main():
         curs.execute("SELECT trp_paper FROM trp_paper")
         already_processed = {papid.replace("\"", "") for row in curs.fetchall() for papid in row[0].split(",")}
 
+    all_proceesed = already_processed | script_processed
     logger.debug(f"Number of already processed papers: {str(len(already_processed))}")
     cm.load_from_wb_database(
         db_name=args.db_name,
         db_user=args.db_user,
         db_password=args.db_password,
         db_host=args.db_host,
-        from_date=from_date,
+        from_date=args.from_date,
         max_num_papers=args.max_num_papers,
         exclude_ids=list(already_processed),
         pap_types=["Journal_article"],
@@ -139,8 +138,8 @@ def main():
 
     # Write processed paper IDs back to file
     if args.processed_files_path is not None:
-        file_name = datetime.datetime.now().strftime("%Y%m%d") + "_" + from_date + "_results.csv"
-        with open(file_name, 'w') as f:
+        file_name = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_results.csv"
+        with open(os.path.join(args.processed_files_path, file_name), 'w') as f:
             for paper_id in processed_ids:
                 f.write(f"{paper_id}\n")
 
