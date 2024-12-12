@@ -72,7 +72,7 @@ def main():
                                 known_transgenes}
 
     transgene_papers = defaultdict(set)
-    unknown_transgene_papers = defaultdict(set)
+    unknown_transgenes_to_add = set()
     processed_ids = []
 
     for paper in cm.get_all_papers():
@@ -91,27 +91,17 @@ def main():
         for match in transgene_pattern.finditer(concatenated_text):
             transgene = match.group(0)
             if transgene not in known_transgenes:
-                unknown_transgene_papers[transgene].add(paper.paper_id)
+                unknown_transgenes_to_add.add(transgene)
+                transgene_papers[transgene].add(paper.paper_id)
 
         processed_ids.append(paper.paper_id)
 
-    # Process known transgenes
-    for transgene_name, paper_ids in transgene_papers.items():
-        with db_manager.generic.get_cursor() as curs:
-            curs.execute("SELECT joinkey FROM trp_publicname WHERE trp_publicname = %s", (transgene_name,))
-            transgene_id = curs.fetchone()
-            curs.execute("DELETE FROM trp_paper WHERE joinkey = %s", (transgene_id,))
-            curs.execute("INSERT INTO trp_paper (joinkey, trp_paper) VALUES (%s, %s)",
-                         (transgene_id, ",".join([f"\"{pap_id}\"" for pap_id in paper_ids])))
-            curs.execute("INSERT INTO trp_paper_hst (joinkey, trp_paper_hst) VALUES (%s, %s)",
-                         (transgene_id, ",".join([f"\"{pap_id}\"" for pap_id in paper_ids])))
-
-    # Process unknown transgenes
-    for transgene_name, paper_ids in unknown_transgene_papers.items():
-        with db_manager.generic.get_cursor() as curs:
+    # add unknown transgenes to db
+    with db_manager.generic.get_cursor() as curs:
+        for transgene_name in unknown_transgenes_to_add:
             # Generate new WBTransgene ID
             curs.execute("SELECT MAX(joinkey) FROM trp_name")
-            max_id = curs.fetchone()[0]
+            max_id = int(curs.fetchone()[0])
             new_id = max_id + 1 if max_id else 1
             new_wbtransgene_id = f"WBTransgene{new_id:08d}"
 
@@ -122,19 +112,27 @@ def main():
             curs.execute("INSERT INTO trp_publicname (joinkey, trp_publicname) VALUES (%s, %s)",
                          (new_id, transgene_name))
 
-            # Insert into trp_paper
-            paper_ids_str = ",".join([f"\"{pid}\"" for pid in paper_ids])
-            curs.execute("INSERT INTO trp_paper (joinkey, trp_paper) VALUES (%s, %s)", (new_id, paper_ids_str))
-
             # Insert into trp_curator
             curs.execute("INSERT INTO trp_curator (joinkey, trp_curator) VALUES (%s, 'WBPerson4793')", (new_id,))
 
             # Update history tables
-            curs.execute("INSERT INTO trp_name_hst (joinkey, trp_name_hst) VALUES (%s, %s)", (new_id, new_wbtransgene_id))
+            curs.execute("INSERT INTO trp_name_hst (joinkey, trp_name_hst) VALUES (%s, %s)",
+                         (new_id, new_wbtransgene_id))
             curs.execute("INSERT INTO trp_publicname_hst (joinkey, trp_publicname_hst) VALUES (%s, %s)",
                          (new_id, transgene_name))
-            curs.execute("INSERT INTO trp_paper_hst (joinkey, trp_paper_hst) VALUES (%s, %s)", (new_id, paper_ids_str))
-            curs.execute("INSERT INTO trp_curator_hst (joinkey, trp_curator_hst) VALUES (%s, 'WBPerson4793')", (new_id,))
+            curs.execute("INSERT INTO trp_curator_hst (joinkey, trp_curator_hst) VALUES (%s, 'WBPerson4793')",
+                         (new_id,))
+
+    # Add transgenes to trp_paper
+    for transgene_name, paper_ids in transgene_papers.items():
+        with db_manager.generic.get_cursor() as curs:
+            curs.execute("SELECT joinkey FROM trp_publicname WHERE trp_publicname = %s", (transgene_name,))
+            transgene_id = curs.fetchone()
+            curs.execute("DELETE FROM trp_paper WHERE joinkey = %s", (transgene_id,))
+            curs.execute("INSERT INTO trp_paper (joinkey, trp_paper) VALUES (%s, %s)",
+                         (transgene_id, ",".join([f"\"{pap_id}\"" for pap_id in paper_ids])))
+            curs.execute("INSERT INTO trp_paper_hst (joinkey, trp_paper_hst) VALUES (%s, %s)",
+                         (transgene_id, ",".join([f"\"{pap_id}\"" for pap_id in paper_ids])))
 
     # Write processed paper IDs back to file
     if args.processed_files_path is not None:
