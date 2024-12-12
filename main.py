@@ -91,7 +91,7 @@ def main():
         # Extract unknown transgenes
         for match in transgene_pattern.finditer(concatenated_text):
             transgene = match.group(0)
-            if transgene.lower() not in known_transgenes:
+            if transgene not in known_transgenes:
                 unknown_transgene_papers[transgene].add(paper.paper_id)
 
         processed_ids.append(paper.paper_id)
@@ -99,8 +99,8 @@ def main():
     # Process known transgenes
     for transgene_name, paper_ids in transgene_papers.items():
         with db_manager.generic.get_cursor() as curs:
-            res = curs.execute("SELECT joinkey FROM trp_publicname WHERE trp_publicname = %s", (transgene_name,))
-            transgene_id = res.fetchone()
+            curs.execute("SELECT joinkey FROM trp_publicname WHERE trp_publicname = %s", (transgene_name,))
+            transgene_id = curs.fetchone()
             curs.execute("DELETE FROM trp_paper WHERE joinkey = %s", (transgene_id,))
             curs.execute("INSERT INTO trp_paper (joinkey, trp_paper) VALUES (%s, %s)",
                          (transgene_id, ",".join([f"\"{pap_id}\"" for pap_id in paper_ids])))
