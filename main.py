@@ -74,7 +74,8 @@ def main():
 
     transgene_papers = defaultdict(set)
     unknown_transgenes_to_add = set()
-    processed_ids_with_transgenes = {}
+    processed_papers_with_existing_transgenes = {}
+    processed_papers_with_new_transgenes = {}
 
     for paper in cm.get_all_papers():
         logger.info("Extracting transgene info from paper " + paper.paper_id)
@@ -82,14 +83,15 @@ def main():
         sentences = paper.get_text_docs(include_supplemental=True, split_sentences=True, lowercase=False)
         concatenated_text = '  '.join(sentence.replace('–', '-').replace('‐', '-') for sentence in sentences)
 
-        processed_ids_with_transgenes[paper.paper_id] = set()
+        processed_papers_with_new_transgenes[paper.paper_id] = set()
+        processed_papers_with_existing_transgenes[paper.paper_id] = set()
 
         # Extract known transgenes
         for pattern in known_transgenes_pattern:
             for match in pattern.finditer(concatenated_text):
                 transgene_name = match.group(0).strip()
                 transgene_papers[transgene_name].add(paper.paper_id)
-                processed_ids_with_transgenes[paper.paper_id].add(transgene_name)
+                processed_papers_with_existing_transgenes[paper.paper_id].add(transgene_name)
 
         # Extract unknown transgenes
         for match in transgene_pattern.finditer(concatenated_text):
@@ -97,7 +99,7 @@ def main():
             if transgene not in known_transgenes:
                 unknown_transgenes_to_add.add(transgene)
                 transgene_papers[transgene].add(paper.paper_id)
-                processed_ids_with_transgenes[paper.paper_id].add(transgene)
+                processed_papers_with_new_transgenes[paper.paper_id].add(transgene)
 
     # add unknown transgenes to db
     with db_manager.generic.get_cursor() as curs:
@@ -136,7 +138,7 @@ def main():
             existing_papers_string = curs.fetchone()
             existing_paper_ids = []
             if existing_papers_string:
-                existing_papers_string = existing_papers_string[0]
+                existing_papers_string = existing_papers_string[0] + ","
                 existing_paper_ids = [pap_id.replace("\"", "").replace("WBPaper", "") for pap_id in
                                       existing_papers_string.split(",")]
             else:
@@ -144,18 +146,21 @@ def main():
             new_paper_ids = set(paper_ids) - set(existing_paper_ids)
             curs.execute("DELETE FROM trp_paper WHERE joinkey = %s", (transgene_id,))
             curs.execute("INSERT INTO trp_paper (joinkey, trp_paper) VALUES (%s, %s)",
-                         (transgene_id, existing_papers_string + "," + ",".join([f"\"WBPaper{pap_id}\"" for
-                                                                                 pap_id in new_paper_ids])))
+                         (transgene_id, existing_papers_string + ",".join([f"\"WBPaper{pap_id}\"" for
+                                                                           pap_id in new_paper_ids])))
             curs.execute("INSERT INTO trp_paper_hst (joinkey, trp_paper_hst) VALUES (%s, %s)",
-                         (transgene_id, existing_papers_string + "," + ",".join([f"\"WBPaper{pap_id}\"" for
-                                                                                 pap_id in new_paper_ids])))
+                         (transgene_id, existing_papers_string + ",".join([f"\"WBPaper{pap_id}\"" for
+                                                                           pap_id in new_paper_ids])))
 
     # Write processed paper IDs back to file
     if args.processed_files_path is not None:
         file_name = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_results.csv"
         with open(os.path.join(args.processed_files_path, file_name), 'w') as f:
-            for paper_id, extracted_transgenes in processed_ids_with_transgenes.items():
-                f.write(f"{paper_id} {', '.join(extracted_transgenes)}\n")
+            for paper_id in set(processed_papers_with_existing_transgenes.keys()) | set(
+                    processed_papers_with_new_transgenes.keys()):
+                f.write(f"{paper_id} "
+                        f"{', '.join([et + ' (n)' for et in processed_papers_with_new_transgenes[paper_id]])} "
+                        f"{', '.join([nt + ' (e)' for nt in processed_papers_with_existing_transgenes[paper_id]])}\n")
 
     logger.info("Finished")
 
