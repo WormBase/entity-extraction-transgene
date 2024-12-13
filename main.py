@@ -133,7 +133,7 @@ def main():
             curs.execute("INSERT INTO trp_paper (joinkey, trp_paper) VALUES (%s, %s)",
                          (transgene_id, ",".join([f"\"WBPaper{pap_id}\"" for pap_id in paper_ids])))
             curs.execute("INSERT INTO trp_paper_hst (joinkey, trp_paper_hst) VALUES (%s, %s)",
-                         (transgene_id, ",".join([f"\"{pap_id}\"" for pap_id in paper_ids])))
+                         (transgene_id, ",".join([f"\"WBPaper{pap_id}\"" for pap_id in paper_ids])))
 
     # Write processed paper IDs back to file
     if args.processed_files_path is not None:
