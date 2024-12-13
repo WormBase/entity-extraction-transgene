@@ -129,11 +129,15 @@ def main():
         with db_manager.generic.get_cursor() as curs:
             curs.execute("SELECT joinkey FROM trp_publicname WHERE trp_publicname = %s", (transgene_name,))
             transgene_id = curs.fetchone()
+            curs.execute("SELECT trp_paper FROM trp_paper WHERE joinkey = %s", (transgene_id,))
+            existing_paper_ids = [pap_id.replace("\"", "").replace("WBPaper", "") for pap_id in
+                                  curs.fetchone().split(",")]
+            all_paper_ids = set(existing_paper_ids) | set(paper_ids)
             curs.execute("DELETE FROM trp_paper WHERE joinkey = %s", (transgene_id,))
             curs.execute("INSERT INTO trp_paper (joinkey, trp_paper) VALUES (%s, %s)",
-                         (transgene_id, ",".join([f"\"WBPaper{pap_id}\"" for pap_id in paper_ids])))
+                         (transgene_id, ",".join([f"\"WBPaper{pap_id}\"" for pap_id in all_paper_ids])))
             curs.execute("INSERT INTO trp_paper_hst (joinkey, trp_paper_hst) VALUES (%s, %s)",
-                         (transgene_id, ",".join([f"\"WBPaper{pap_id}\"" for pap_id in paper_ids])))
+                         (transgene_id, ",".join([f"\"WBPaper{pap_id}\"" for pap_id in all_paper_ids])))
 
     # Write processed paper IDs back to file
     if args.processed_files_path is not None:
