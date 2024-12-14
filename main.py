@@ -158,10 +158,14 @@ def main():
         with open(os.path.join(args.processed_files_path, file_name), 'w') as f:
             for paper_id in set(processed_papers_with_existing_transgenes.keys()) | set(
                     processed_papers_with_new_transgenes.keys()):
-                f.write(f"{paper_id} "
-                        f"{', '.join([et + ' (n)' for et in processed_papers_with_new_transgenes[paper_id]])} "
-                        f"{', '.join([nt + ' (e)' for nt in processed_papers_with_existing_transgenes[paper_id]])}\n")
-
+                result_string = f"{paper_id}"
+                if processed_papers_with_new_transgenes[paper_id]:
+                    result_string += " " + ', '.join([nt + ' (n)' for nt in processed_papers_with_new_transgenes[paper_id]])
+                    if processed_papers_with_existing_transgenes[paper_id]:
+                        result_string += ","
+                if processed_papers_with_existing_transgenes[paper_id]:
+                    result_string += " " + ', '.join([et + ' (e)' for et in processed_papers_with_existing_transgenes[paper_id]])
+                f.write(result_string + "\n")
     logger.info("Finished")
 
 
