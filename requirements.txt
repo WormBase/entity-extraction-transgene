@@ -1,1 +1,1 @@
-wbtools==3.0.13
+wbtools==3.7.1
